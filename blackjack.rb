@@ -30,6 +30,9 @@ class Game
       @players.push(Player.new(name))
     end
 
+    # dealer will be the last to play each round
+    @players.push(Player.new("Dealer", true))
+
     # is there an ideal number of decks per person playing?
     num_decks = 1
 
@@ -41,10 +44,6 @@ class Game
         end
       end
     end
-  end
-
-  def live_players
-    @players.select {|player| player.live}
   end
 
   def shuffle
@@ -66,18 +65,34 @@ class Game
 end
 
 class Player
-  attr_accessor :hand, :live
-  attr_reader :name, :cash
+  attr_accessor :hand
+  attr_reader :name, :cash, :dealer
 
-  def initialize(name)
-    @live = true
+  def initialize(name, dealer = false)
     @name = name
+    @dealer = dealer
     @cash = INIT_CASH
     @hand = []
   end
 
   def hand_sum
     return @hand.map {|card| card.rank}.reduce(:+)
+  end
+
+  def get_action
+    if @dealer
+      if hand_sum < 17
+        action = "h"
+        puts "The dealer has #{hand_sum} points and must hit."
+      else
+        action = "s"
+        puts "The dealer has #{hand_sum} points and must stand."
+      end
+      sleep(1)
+    else
+      action = prompt("#{@name}\'s turn: You currently have #{hand_sum} points. What would you like to do?")
+    end
+    return action
   end
 end
 
@@ -106,7 +121,6 @@ if __FILE__ == $0
     while true
       game.reset_cards
       game.players.each do |player|
-        player.live = true
         2.times do
           new_card = game.deal_card
           player.hand.push(new_card)
@@ -115,60 +129,26 @@ if __FILE__ == $0
       end
 
       game.players.each do |player|
-        if game.live_players.length == 1
-          break;
-        end
         # need error checking here
-        action = nil
-        action = prompt("#{player.name}\'s turn: You currently have #{player.hand_sum} points. What would you like to do?")
+        action = player.get_action
         while action != "s"
           if action == "h"
             new_card = game.deal_card
             player.hand.push(new_card)
-            puts "You drew the #{new_card.name}."
+            puts "#{player.name} drew the #{new_card.name}."
             if player.hand_sum > 21
               puts "Bust!"
-              player.live = false
               break
             elsif player.hand_sum == 21
               puts "Blackjack!"
               break
             else
-              action = prompt("#{player.name}\'s turn: You currently have #{player.hand_sum} points. What would you like to do?")
+              action = player.get_action
             end
           elsif action != "s"
             action = prompt("Invalid response. Please type \"h\" to hit or \"s\" to stand.")
           end
         end
-      end
-
-      # can optimize this condition
-      if game.live_players.length > 1
-        winners = []
-        losers = []
-        game.live_players.each do |player|
-          # what happens in a tie?
-          if winners.length == 0
-            winners = [player]
-          else
-            if player.hand_sum > winners[0].hand_sum
-              losers += winners
-              winners = [player]
-            elsif player.hand_sum == winners[0].hand_sum
-              winners.push(player)
-            else
-              losers.push(player)
-            end
-          end
-        end
-        puts winners[0].name
-        if winners.length == 1
-          puts "#{winners[0].name} wins!"
-        else
-          puts "Push. Your bets have been returned."
-        end
-      else
-          puts "#{game.live_players[0].name} wins!"
       end
 
       action = prompt("Round over. Deal again?")
@@ -183,7 +163,7 @@ if __FILE__ == $0
         end
       end
 
-      # jank
+      # hackish; maybe should throw an error above?
       if action == "n" || action == "q"
         break;
       end
