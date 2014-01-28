@@ -9,12 +9,12 @@ require('pp')
 
 INIT_CASH = 1000
 
-NUM_DECKS = 8
+NUM_DECKS = 1
 
 CARD_SUITS = %w(Hearts Diamonds Spades Clubs)
 
 # CARD_RANKS = %w(Ace 2 3 4 5 6 7 8 9 10 Jack Queen King)
-CARD_RANKS = %w(1 1 1 1 1 1 1 1 1 1 1 1 1)
+CARD_RANKS = %w(Ace Ace Ace Ace Ace Ace Ace 8 9 10 Jack Queen King)
 
 CARD_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10]
 
@@ -101,9 +101,10 @@ class Game
       if new_hand.score == 21
         puts "Blackjack!"
         # if player is dealer, end game
-      elsif !player.dealer && new_hand.pair
-        player.hands += new_hand.split_hand
+      elsif !player.dealer && new_hand.pair        
+        player.hands += new_hand.split(@cards)
       end
+      pp player.hands
       puts "\n"
     end
   end
@@ -256,14 +257,23 @@ class Hand
     end
   end
 
-  def split_hand
+  def split(cards)
     split = bool_prompt("You have a pair of #{@cards[0].rank}s. Would you like to split?")
     new_hands = []
     if split
-      new_hand = Hand.new(@cards.pop)
-      
+      old_card = @cards.pop
+      new_card = cards.pop
+      @cards.push(new_card)
+      puts "You were dealt the #{new_card.rank} of #{new_card.suit}. You know have:"
+      show
+      new_hands += split(cards) if pair
+
+      new_card = cards.pop
+      new_hand = Hand.new([old_card, cards.pop])
       new_hands.push(new_hand)
-      new_hands += hand.split_hand if hand.pair
+      puts "You were dealt the #{new_card.rank} of #{new_card.suit}. You now have:"
+      show
+      new_hands += new_hand.split(cards) if new_hand.pair
     end
     new_hands
   end
