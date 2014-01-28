@@ -13,13 +13,13 @@ NUM_DECKS = 1
 
 CARD_SUITS = %w(Hearts Diamonds Spades Clubs)
 
-# CARD_RANKS = %w(Ace 2 3 4 5 6 7 8 9 10 Jack Queen King)
-CARD_RANKS = %w(Ace Ace Ace Ace Ace Ace Ace 8 9 10 Jack Queen King)
+CARD_RANKS = %w(Ace 2 3 4 5 6 7 8 9 10 Jack Queen King)
+# CARD_RANKS = %w(Ace Ace Ace Ace Ace Ace Ace 8 9 10 Jack Queen King)
 
 CARD_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10]
 
 def prompt(*args)
-  print(*args)
+  puts(*args)
   gets.chomp
 end
 
@@ -71,20 +71,21 @@ class Game
         @cards += hand.cards
       end
       player.hands = []
-      player.bet = nil
     end
     @cards = @cards.shuffle
   end
 
   def deal_cards
     live_players.each do |player|
+      puts "===== #{player.name}'s Turn ====="
+      new_hand = Hand.new
+
       # could be prettier
-      player.bet = player.dealer ? 1 : prompt("#{player.name}: You currently have $#{player.cash}. What would you like to bet?").to_i
-      while !player.dealer && (player.bet < 1 || player.bet > player.cash)
-        player.bet = prompt("#{player.name}: Please enter a valid bet from $1 to $#{player.cash}").to_i
+      new_hand.bet = player.dealer ? 1 : prompt("#{player.name}: You currently have $#{player.cash}. What would you like to bet?").to_i
+      while !player.dealer && (new_hand.bet < 1 || new_hand.bet > player.cash)
+        new_hand.bet = prompt("#{player.name}: Please enter a valid bet from $1 to $#{player.cash}").to_i
       end
 
-      new_hand = Hand.new
       2.times do |count|
         new_card = @cards.pop
 
@@ -101,17 +102,20 @@ class Game
       if new_hand.score == 21
         puts "Blackjack!"
         # if player is dealer, end game
-      elsif !player.dealer && new_hand.pair        
+      elsif !player.dealer && new_hand.pair      
         player.hands += new_hand.split(@cards)
       end
-      pp player.hands
       puts "\n"
     end
   end
 
   def play_round
     live_players.each do |player|
-      player.hands.each do |hand|
+      puts "===== #{player.name}'s Turn ====="
+      player.hands.each_with_index do |hand, i|
+        if player.hands.length > 1
+          puts "***** Hand #{i + 1} *****"
+        end
         if hand.score == 21
           puts "#{player.name} has blackjack.\n"
         else
@@ -130,8 +134,19 @@ class Game
               else
                 action = hand.get_action(player)
               end
-            elsif action != "s"
-              action = prompt("Invalid response. Please type \"h\" to hit or \"s\" to stand.")
+            elsif action == "d"
+              # should only be able to double down once
+              if hand.doubled_down
+                puts "You've already doubled down."
+              elsif player.total_bet + hand.bet < player.cash
+                hand.bet *= 2
+                puts "Double down! Your new bet is #{hand.bet}."
+              else
+                puts "You don't have the cash to double down."
+              end
+              action = hand.get_action(player)
+            elsif
+              action = prompt("Invalid response. Please type \"h\" to hit, \"s\" to stand, or \"d\" to double down.")
             end
           end
         end
@@ -176,6 +191,7 @@ class Game
 
   # collect bets iteratively at end
   def collect_winnings
+    puts "===== Round Over ====="
     dealer = @players.last
     live_players[0..-2].each do |player|
       player.hands.each do |hand|
@@ -183,17 +199,18 @@ class Game
         if hand.won.nil?
           puts "#{player.name}: Push. Dealer has returned your bet. You have $#{player.cash}."
         elsif hand.won
-          player.cash += player.bet
-          dealer.cash -= player.bet
-          puts "#{player.name}: You win $#{player.bet}! You now have $#{player.cash}."
+          player.cash += hand.bet
+          dealer.cash -= hand.bet
+          puts "#{player.name}: You win $#{hand.bet}! You now have $#{player.cash}."
         else
-          player.cash -= player.bet
-          dealer.cash += player.bet
+          player.cash -= hand.bet
+          dealer.cash += hand.bet
           if player.cash <= 0
             player.live = false
             puts "#{player.name}: You've lost all of your money! Better luck next time."
+            break
           else
-            puts "#{player.name}: You lose #{player.bet}. You have $#{player.cash} remaining."
+            puts "#{player.name}: You lose #{hand.bet}. You have $#{player.cash} remaining."
           end
         end
       end
@@ -211,21 +228,25 @@ class Player
     @dealer = dealer
     @cash = cash
     @hands = []
-    @bet = 0
     @live = true
+  end
+
+  def round_bet
+    @hands.map {|hand| hand.bet}.reduce(:+)
   end
 end
 
 class Hand
-  attr_accessor :cards, :won
+  attr_accessor :cards, :won, :bet, :doubled_down
 
-  def initialize(cards = [])
+  def initialize(cards = [], bet = 0, doubled_down = false)
     @cards = cards
     @won = nil
+    @bet = bet
   end
 
   def pair
-    @cards.map {|card| card.rank}.reduce(:==) if @cards.length == 2
+    @cards.map {|card| card.value}.reduce(:==) if @cards.length == 2
   end
 
   def score
@@ -233,7 +254,6 @@ class Hand
   end
 
   def get_action(player)
-    puts "#{player.name}'s hand:"
     show
     if player.dealer
       if score < 17
@@ -258,7 +278,7 @@ class Hand
   end
 
   def split(cards)
-    split = bool_prompt("You have a pair of #{@cards[0].rank}s. Would you like to split?")
+    split = bool_prompt("You have a pair! Would you like to split?")
     new_hands = []
     if split
       old_card = @cards.pop
@@ -266,14 +286,16 @@ class Hand
       @cards.push(new_card)
       puts "You were dealt the #{new_card.rank} of #{new_card.suit}. You know have:"
       show
-      new_hands += split(cards) if pair
 
       new_card = cards.pop
-      new_hand = Hand.new([old_card, cards.pop])
+      new_hand = Hand.new([old_card, new_card], @bet, @doubled_down)
       new_hands.push(new_hand)
       puts "You were dealt the #{new_card.rank} of #{new_card.suit}. You now have:"
-      show
+      new_hand.show
+
+      new_hands += split(cards) if pair
       new_hands += new_hand.split(cards) if new_hand.pair
+
     end
     new_hands
   end
