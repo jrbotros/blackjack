@@ -165,67 +165,44 @@ class Game
   end
 
   def score_round
-    # what about when dealer gets blackjack? need to account for some extra rules here
-    dealer_score = live_players.last.hands[0].score
+    puts "~~~~~ Round Over ~~~~~"
+    dealer_hand = live_players.last.hands[0]
     live_players[0..-2].each do |player|
-      player.hands.each do |hand|
-        if dealer_score <= 21
-          if hand.score <= 21
-            # use an enum
-            if hand.score > dealer_score
-              hand.won = true
-            elsif hand.score == dealer_score
-              hand.won = nil
+      puts "===== #{player.name} ====="
+      player.hands.each_with_index do |hand, i|
+        if player.live
+          puts "Hand #{i + 1}:"
+          if dealer_hand.blackjack
+            hand.blackjack ? player.collect_bet(hand.bet, 0) : player.collect_bet(hand.bet, -1)
+          elsif hand.blackjack
+            player.collect_bet(hand.bet, 1.5)
+          else
+            if dealer_hand.score <= 21
+              if hand.score <= 21
+                if hand.score > dealer_hand.score
+                  player.collect_bet(hand.bet, 1)
+                elsif hand.score == dealer_hand.score
+                  player.collect_bet(hand.bet, 0)
+                else
+                  player.collect_bet(hand.bet, -1)
+                end
+              else
+                # player busted
+                player.collect_bet(hand.bet, -1)
+              end
             else
-              hand.won = false
+              # dealer busted
+              hand.score <= 21 ? player.collect_bet(hand.bet, 1) : player.collect_bet(hand.bet, -1)
             end
-          else
-            # player busted
-            hand.won = false
-          end
-        else
-          # dealer busted
-          if hand.score <= 21
-            hand.won = true
-          else
-            hand.won = false
           end
         end
       end
     end
   end
-
-  # collect bets iteratively at end
-  def collect_winnings
-    puts "===== Round Over ====="
-    dealer = @players.last
-    live_players[0..-2].each do |player|
-      player.hands.each do |hand|
-        if hand.won.nil?
-          puts "#{player.name}: Push. Dealer has returned your bet. You have $#{player.cash}."
-        elsif hand.won
-          player.cash += hand.bet
-          dealer.cash -= hand.bet
-          puts "#{player.name}: You win $#{hand.bet}! You now have $#{player.cash}."
-        else
-          player.cash -= hand.bet
-          dealer.cash += hand.bet
-          if player.cash <= 0
-            player.live = false
-            puts "#{player.name}: You've lost all of your money! Better luck next time."
-            break
-          else
-            puts "#{player.name}: You lose #{hand.bet}. You have $#{player.cash} remaining."
-          end
-        end
-      end
-    end
-  end
-
 end
 
 class Player
-  attr_accessor :bet, :cash, :hands, :live, :won, :blackjack
+  attr_accessor :bet, :cash, :hands, :live, :won
   attr_reader :name, :dealer
 
   def initialize(name, dealer = false, cash = INIT_CASH)
@@ -234,16 +211,31 @@ class Player
     @cash = cash
     @hands = []
     @live = true
-    @blackjack = false
   end
 
   def total_bet
     @hands.map {|hand| hand.bet}.reduce(:+)
   end
+
+  def collect_bet(bet, mult)
+    @cash += bet * mult
+    if mult > 0
+      puts "#{@name}: You win $#{bet}! You now have $#{@cash}."
+    elsif mult == 0
+      puts "#{@name}: Push. Dealer has returned your bet. You have $#{@cash}."
+    else
+      if @cash <= 0
+        @live = false
+        puts "#{@name}: You've lost all of your money! Better luck next time."
+      else
+        puts "#{@name}: You lose #{bet}. You have $#{@cash} remaining."
+      end
+    end
+  end
 end
 
 class Hand
-  attr_accessor :cards, :won, :bet, :doubled_down, :more_cards
+  attr_accessor :cards, :won, :bet, :doubled_down, :more_cards, :blackjack
 
   def initialize(cards = [], bet = 0, doubled_down = false, more_cards = true)
     @cards = cards
@@ -251,6 +243,7 @@ class Hand
     @bet = bet
     @doubled_down = doubled_down
     @more_cards = more_cards
+    @blackjack = false
   end
 
   def pair
@@ -361,7 +354,6 @@ if __FILE__ == $0
       game.deal_cards
       game.play_round
       game.score_round
-      game.collect_winnings
       
       game_live = bool_prompt("Round over. Deal again?")
 
