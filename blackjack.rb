@@ -70,7 +70,7 @@ class Hand
 
   def blackjack
     # blackjack must be composed two cards totaling 21, and cannot occur on a hand split from aces
-    @cards.length == 2 && score == 21 && !(@is_split && @cards.first.rank == "Ace") 
+    @cards.length == 2 && score == 21 && !(@is_split && @cards[0].rank == "Ace") 
   end
 
   def show
