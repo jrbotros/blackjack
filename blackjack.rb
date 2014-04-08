@@ -9,10 +9,23 @@
 
 INIT_CASH = 1000
 INT_REGEX = /^[0-9]+$/
-CARD_SUITS = %w(Hearts Diamonds Spades Clubs)
-CARD_RANKS = %w(Ace 2 3 4 5 6 7 8 9 10 Jack Queen King)
-CARD_VALUES = [11, 2, 3, 4, 5, 6, 7, 8, 9, 10, 10, 10, 10]
 NUM_DECKS = 8
+CARD_SUITS = %w(Hearts Diamonds Spades Clubs)
+CARD_TYPES = { 
+              "Ace" => 11,
+              "2" => 2,
+              "3" => 3,
+              "4" => 4,
+              "5" => 5,
+              "6" => 6,
+              "7" => 7,
+              "8" => 8,
+              "9" => 9,
+              "10" => 10,
+              "Jack" => 10,
+              "Queen" => 10,
+              "King" => 10
+             }
 
 def prompt(*args)
   puts(*args)
@@ -51,8 +64,7 @@ class Hand
   end
 
   def pair
-    # mod 10 checks for ace pairs
-    @cards.map { |card| card.value % 10 }.reduce(:==) if @cards.length == 2
+    @cards.map { |card| card.value }.reduce(:==) if @cards.length == 2
   end
 
   def score
@@ -61,7 +73,7 @@ class Hand
       @cards.each do |card|
         if card.value == 11
           sum -= 10
-          break if sum < 21
+          break if sum <= 21
         end
       end
     end
@@ -80,34 +92,25 @@ class Hand
     puts "\n"
   end
 
-  def split(cards)
+  def split(new_cards)
     puts "===================="
     split_hand = bool_prompt("You have two cards of the same value! Would you like to split?")
-    new_hands = []
     if split_hand
       old_card = @cards.pop
-      new_card = cards.pop
-      @cards.push(new_card)
-      @is_split = true
+      @cards.push(new_cards[0])
 
-      puts "You were dealt the #{new_card.name}. You now have:"
+      puts "You were dealt the #{new_cards[0].name}. You now have:"
       show
       sleep(1)
 
-      # split if first hand now contains pair
-      new_hands += split(cards) if pair
-      new_card = cards.pop
-      new_hand = Hand.new([old_card, new_card], @bet, true)
-      new_hands.push(new_hand)
+      new_hand = Hand.new([old_card, new_cards[1]], @bet, true)
+      @is_split = true
 
-      puts "You were dealt the #{new_card.name}. You now have:"
+      puts "You were dealt the #{new_cards[1].name}. You now have:"
       new_hand.show
       sleep(1)
-
-      # split if second hand now contains pair
-      new_hands += new_hand.split(cards) if new_hand.pair
     end
-    new_hands
+    new_hand
   end
 end
 
@@ -182,8 +185,8 @@ class Game
     @cards = []
     NUM_DECKS.times do
       CARD_SUITS.each do |suit|
-        CARD_RANKS.each_with_index do |rank, i|
-          @cards.push(Card.new(suit, rank, CARD_VALUES[i]))
+        CARD_TYPES.each do |rank, value|
+          @cards.push(Card.new(suit, rank, value))
         end
       end
     end
@@ -231,8 +234,14 @@ class Game
 
       if new_hand.blackjack
         puts "Blackjack!"
-      elsif player != @dealer && new_hand.pair
-        player.hands += new_hand.split(@cards)
+      elsif player != @dealer
+        while true
+          pairs = player.hands.select{ |hand| hand.pair }
+          break if pairs.empty?
+          pairs.each do |pair|
+            player.hands.push(pair.split(@cards.pop(2)))
+          end
+        end
       end
 
       puts "\n"
